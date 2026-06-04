@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Keyboard Layout Studio v0.22.0 | MacBook Pro 16 JIS</title>
+<style>
+/* keyboard-editor.html v0.22.0 — keyboard-maker
+   3パネル・インタラクティブ配列エディタ
+   配列/サイズ感/位置 = MacBook Pro 16" JIS（karabiner-keymap v19 準拠）
+   見た目（フォント・キーの形・グレー枠=長押し・2段表示） = 提示画像#2 準拠
+   文脈 = Karabiner-Elements（レイヤー・単押し長押し・アプリ別・機能ライブラリ） */
+*, *::before, *::after { box-sizing: border-box; }
+:root {
+  --paper: #F5F2EB;
+  --panel: #FFFFFF;
+  --stage: #D8D5CE;        /* 画像#2 のグレー背景 */
+  --text: #1A1A1A;
+  --muted: #5F6470;
+  --faint: #6B7280;        /* AA: 4.83:1 */
+  --line: #E3E0D8;
+  --line-strong: #1A1A1A;
+  --hold: #706D64;         /* グレー枠 = 長押し（AA 4.7:1） */
+  --key-dim: #767676;      /* 未割当ラベル AA 4.54:1 */
+  --rowh: 54px;
+  --focus: #2196F3;
+  --accent: #FF8C42;
+  /* テーマ変数（設定パネルで上書き） */
+  --key-bg: #FFFFFF;
+  --key-text: #1A1A1A;
+  --groove: #DAD7CF;
+  --stage-bg: #D8D5CE;
+  --ref-color: rgba(20,20,20,.34);
+  --key-font-family: var(--font);
+  --ok: #2E7D32;
+  --shadow: 2px 2px 0 0 var(--line-strong);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+}
+html, body { height: 100%; }
+body {
+  margin: 0; color: var(--text); background: var(--paper);
+  font-family: var(--font); font-weight: 600; font-size: 14px; overflow: hidden;
+}
+button { font-family: inherit; }
+.app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+
+/* ---------- Top bar ---------- */
+.topbar { display: flex; align-items: center; gap: 12px; padding: 10px 18px; background: var(--panel); border-bottom: 1.5px solid var(--line); }
+.brand { display: flex; align-items: baseline; gap: 8px; }
+.brand h1 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
+.brand .ver { font-size: 11px; color: var(--muted); }
+.brand .kb { font-size: 11px; color: var(--faint); }
+.topbar .spacer { flex: 1; }
+.tbtn {
+  appearance: none; height: 34px; padding: 0 13px; display: inline-flex; align-items: center; gap: 6px;
+  color: var(--text); background: var(--panel); border: 1.5px solid var(--line); border-radius: 8px; cursor: pointer;
+  font: 600 13px/1 var(--font); transition: border-color .12s, background .12s, color .12s, box-shadow .12s; white-space: nowrap;
+}
+.tbtn:hover { border-color: var(--line-strong); }
+.tbtn:disabled { opacity: .4; cursor: default; }
+.tbtn.primary { background: var(--text); color: #fff; border-color: var(--text); }
+.tbtn.primary:hover { box-shadow: var(--shadow); }
+.tbtn.write { background: #1f7a3d; color: #fff; border-color: #1f7a3d; }
+.tbtn.write:hover { box-shadow: 2px 2px 0 0 #0d4d23; }
+.tbtn.write.off { background: var(--panel); color: var(--muted); border-color: var(--line); }
+.menu-wrap { position: relative; }
+.menu { position: absolute; right: 0; top: 40px; min-width: 220px; background: #fff; border: 1.5px solid var(--line-strong);
+  border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.18); padding: 6px; display: none; z-index: 40; }
+.menu.show { display: block; }
+.menu button { display: flex; width: 100%; align-items: center; gap: 8px; padding: 9px 10px; border: none; background: transparent;
+  border-radius: 7px; cursor: pointer; font: 600 13px/1.2 var(--font); color: var(--text); text-align: left; }
+.menu button:hover { background: #F3F1EB; }
+.menu .sep { height: 1px; background: var(--line); margin: 5px 4px; }
+.menu small { color: var(--faint); font-weight: 600; }
+.saved { font-size: 11.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.saved .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.saved.dirty .dot { background: var(--accent); }
+
+/* ---------- Body 3 panes ---------- */
+.body { display: grid; grid-template-columns: 252px 1fr 312px; min-height: 0; }
+.pane { min-height: 0; overflow: auto; }
+.pane.left { background: var(--panel); border-right: 1.5px solid var(--line); }
+.pane.center { padding: 16px 22px 30px; }
+.pane.right { background: var(--panel); border-left: 1.5px solid var(--line); }
+
+/* ---------- Left pane ---------- */
+.ltabs { display: flex; gap: 4px; padding: 12px 12px 0; }
+.ltab { appearance: none; flex: 1; min-height: 38px; padding: 8px 6px; color: var(--muted); background: transparent; border: none;
+  border-bottom: 2px solid transparent; cursor: pointer; font: 600 12.5px/1.2 var(--font);
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.ltab:hover { color: var(--text); }
+.ltab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.ltab .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--line); color: var(--text);
+  font-size: 10.5px; display: inline-flex; align-items: center; justify-content: center; }
+.lhead { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 8px; color: var(--faint);
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.iconbtn { appearance: none; width: 26px; height: 26px; border-radius: 7px; border: 1.5px solid var(--line); background: var(--panel);
+  color: var(--text); cursor: pointer; font-size: 16px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.iconbtn:hover { border-color: var(--line-strong); }
+.layer-list, .combo-list, .fn-groups { padding: 2px 10px 16px; display: flex; flex-direction: column; gap: 4px; }
+.layer-row { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 9px; cursor: pointer; border: 1.5px solid transparent; }
+.layer-row:hover { background: #FAF8F3; }
+.layer-row.active { background: #FFFFFF; border-color: var(--line-strong); box-shadow: var(--shadow); }
+.layer-row .ldot { width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto; }
+.layer-row .lname { flex: 1; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.layer-row .lidx { color: var(--faint); font-size: 12px; font-weight: 700; }
+.layer-row .ltrig { font-size: 10px; color: var(--muted); }
+.layer-row .lgear { opacity: 0; width: 22px; height: 22px; border-radius: 6px; border: none; background: transparent; cursor: pointer; font-size: 13px; color: var(--muted); }
+.layer-row:hover .lgear, .layer-row.active .lgear { opacity: 1; }
+.layer-row .lgear:hover { background: var(--line); color: var(--text); }
+.combo-item, .fn-item { border: 1.5px solid var(--line); border-radius: 9px; padding: 9px 11px; display: flex; align-items: center; gap: 8px; }
+.combo-item .ckeys { font-weight: 700; }
+.combo-item .carrow { color: var(--faint); }
+.combo-item .cout { flex: 1; }
+.combo-item .del, .fn-item .del { appearance: none; border: none; background: transparent; color: var(--faint); cursor: pointer; font-size: 15px; padding: 2px 4px; border-radius: 5px; }
+.combo-item .del:hover, .fn-item .del:hover { color: #c0392b; background: #fbeaea; }
+.miniform { padding: 4px 12px 16px; display: flex; flex-direction: column; gap: 7px; }
+.miniform input, .miniform select, .cfg input, .cfg select, .cfg textarea {
+  width: 100%; height: 34px; padding: 0 10px; border: 1.5px solid var(--line); border-radius: 8px; font: 600 13px/1 var(--font); color: var(--text); background: #fff; }
+.miniform textarea, .cfg textarea { height: auto; padding: 8px 10px; line-height: 1.4; resize: vertical; }
+.miniform .row2 { display: flex; gap: 7px; }
+.fn-group-title { font-size: 11px; color: var(--faint); margin: 10px 0 2px; display: flex; align-items: center; gap: 6px; }
+.fn-group-title .gd { width: 9px; height: 9px; border-radius: 2px; }
+.fn-item .fl { flex: 1; font-size: 13px; }
+.fn-item.draggable { cursor: grab; }
+.hint { padding: 0 14px 14px; color: var(--faint); font-size: 11.5px; line-height: 1.5; }
+
+/* ---------- Center stage（画像#2 準拠） ---------- */
+.controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.appsel { display: inline-flex; align-items: center; gap: 7px; }
+.appsel label { font-size: 12px; color: var(--muted); }
+.appsel select { height: 32px; border: 1.5px solid var(--line); border-radius: 8px; padding: 0 8px; font: 600 12.5px/1 var(--font); background: #fff; }
+.toggle { appearance: none; height: 32px; padding: 0 12px; border: 1.5px solid var(--line); border-radius: 8px; background: #fff; color: var(--muted); cursor: pointer; font: 600 12.5px/1 var(--font); }
+.toggle[aria-pressed="true"] { color: var(--text); border-color: var(--line-strong); background: #FFF7EE; }
+.caption { background: #FFFDF8; border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 13px; color: var(--muted); font-size: 12.5px; line-height: 1.5; margin-bottom: 12px; }
+.caption strong { color: var(--text); }
+
+.kb-stage { background: var(--stage-bg, var(--stage)); border-radius: 14px; padding: 20px 22px 24px; }
+.stage-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 4px 16px; }
+.stage-head .title { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+.stage-head .legend-hold { font-size: 13px; color: #6f6c64; font-weight: 600; }
+.stage-head .legend-hold .box { display: inline-block; width: 16px; height: 13px; border: 2.5px solid var(--hold); border-radius: 4px; vertical-align: -2px; margin-right: 5px; }
+
+.kb-wrap { width: 100%; overflow-x: auto; }
+.keyboard { display: grid; grid-template-columns: repeat(120, 1fr); grid-template-rows: repeat(6, var(--rowh, 54px)); --kb-gap: clamp(2px, 0.18vw, 3.5px); gap: var(--kb-gap); width: 100%; max-width: 1500px; margin: 0 auto; }
+.key {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 0; min-height: 0; padding: 3px;
+  color: var(--key-text, #1A1A1A); background: var(--key-bg, #fff);
+  border: 1px solid var(--groove, #DAD7CF); border-radius: 7px;   /* MBP風: 角は小さめ長方形・溝は薄く */
+  font-family: var(--key-font-family, var(--font));
+  cursor: pointer; overflow: hidden; text-align: center;
+  transition: border-color .1s, box-shadow .1s, background .1s;
+}
+.key:hover { border-color: var(--line-strong); }
+.key.hold { border: 2px solid var(--hold); }            /* グレー枠 = 長押し */
+.key.layer-locked { background:#C2BFB7; border:1px solid #ACA99F; color:#5f5c54; cursor:not-allowed; }
+.key.layer-locked .k-main { color:#5f5c54; }
+.key .k-ref { position:absolute; top:3px; left:5px; font-size: calc(var(--fhold,9px)*0.95); line-height:1; color: var(--ref-color, rgba(20,20,20,.34)); font-weight:700; pointer-events:none; }
+/* JIS Return の L字（上段やや広・下段やや狭）。隣接エッジの角丸を消して一体に見せる */
+.key.ret-top { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.key.ret-bot { border-top-left-radius: 0; border-top-right-radius: 0; }
+.key.selected { border-color: var(--focus) !important; box-shadow: 0 0 0 2px rgba(33,150,243,.30); z-index: 3; }
+.key .k-hold { font-size: var(--fhold, 9px); line-height: 1; color: #5f5c54; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.key .k-hold:empty { display: none; }
+.key .k-main { font-size: var(--fmain, 13px); line-height: 1.05; font-weight: 700; margin-top: 1px; width: 100%; overflow-wrap: anywhere; word-break: keep-all; }
+.key .k-main:empty { display: none; }
+.key.dim .k-main { color: var(--key-dim); font-weight: 600; }
+.key.cat-dot::after { content: ""; position: absolute; right: 5px; bottom: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--cdot, transparent); }
+.key.trigger { box-shadow: inset 0 0 0 2px var(--tc, var(--accent)); }
+.key.app-override .ovr { position: absolute; right: 5px; top: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--focus); }
+.key.diff-hit { outline: 2px dashed var(--accent); outline-offset: -3px; }
+.key.combo-key .cmb { position: absolute; left: 5px; bottom: 5px; font-size: 9px; color: #5a3fa3; }
+.arrow-stack { padding: 2px; }
+.arrow-stack .half { font-size: 11px; line-height: 1; }
+.key:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+.legend .li { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 1.5px solid var(--line); border-radius: 999px; font-size: 11.5px; color: var(--text); background: #fff; }
+.legend .li .sw { width: 11px; height: 11px; border-radius: 3px; }
+
+/* ---------- Right pane ---------- */
+.cfg { padding: 16px 16px 30px; display: flex; flex-direction: column; gap: 14px; }
+.cfg .empty { color: var(--faint); text-align: center; padding: 60px 10px; font-size: 13px; line-height: 1.7; }
+.cfg .empty .big { font-size: 30px; display: block; margin-bottom: 10px; opacity: .5; }
+.cfg .keyhead { display: flex; align-items: center; gap: 10px; }
+.cfg .keycap { width: 46px; height: 46px; border-radius: 12px; border: 1.5px solid var(--line-strong); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; background: #fff; }
+.cfg .keyhead .info { font-size: 12px; color: var(--muted); }
+.cfg .keyhead .info b { color: var(--text); font-size: 15px; display: block; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.scope-note { font-size: 11.5px; padding: 8px 10px; border-radius: 8px; line-height: 1.5; background: #F3F8FF; border: 1.5px solid #CFE5FF; color: #1F5FA6; }
+.scope-note.allapps { background: #FAF8F3; border-color: var(--line); color: var(--muted); }
+.cfg .actions { display: flex; gap: 8px; margin-top: 2px; }
+.cfg .actions .tbtn { flex: 1; justify-content: center; }
+.danger { color: #c0392b !important; border-color: #f0c7c0 !important; }
+.danger:hover { background: #fbeaea; }
+
+/* modal */
+.modal-bg { position: fixed; inset: 0; background: rgba(20,20,20,.4); display: none; align-items: center; justify-content: center; z-index: 50; }
+.modal-bg.show { display: flex; }
+.modal { background: #fff; border-radius: 14px; padding: 22px; width: min(440px, 92vw); box-shadow: 0 20px 60px rgba(0,0,0,.25); max-height: 90vh; overflow: auto; }
+.modal h3 { margin: 0 0 14px; font-size: 16px; }
+.modal .field { margin-bottom: 12px; }
+.modal .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.modal .sw-pick { width: 28px; height: 28px; border-radius: 7px; cursor: pointer; border: 2px solid transparent; }
+.modal .sw-pick[aria-pressed="true"] { border-color: var(--text); }
+.modal .mfoot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+
+/* 設定パネル */
+.presets { display:flex; flex-wrap:wrap; gap:8px; }
+.tbtn.preset { display:inline-flex; align-items:center; gap:7px; }
+.tbtn.preset .pv { width:16px; height:16px; border-radius:5px; border:1.5px solid; flex:0 0 auto; }
+.ci-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.ci { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; color:var(--muted); border:1.5px solid var(--line); border-radius:8px; padding:5px 10px; }
+.ci input[type=color]{ width:36px; height:24px; border:none; background:none; padding:0; cursor:pointer; }
+.modal input[type=range]{ width:100%; accent-color:var(--accent); }
+
+/* ダークテーマ: ハードコード白面の上書き */
+body[data-theme="dark"] .modal{ background:var(--panel); }
+body[data-theme="dark"] #modal input:not([type=color]), body[data-theme="dark"] #modal select, body[data-theme="dark"] #modal textarea,
+body[data-theme="dark"] .cfg input, body[data-theme="dark"] .cfg select, body[data-theme="dark"] .cfg textarea,
+body[data-theme="dark"] .miniform input, body[data-theme="dark"] .miniform select{ background:#2b2b2e; color:var(--text); border-color:var(--line); }
+body[data-theme="dark"] .caption{ background:var(--panel); }
+body[data-theme="dark"] .layer-row:hover{ background:rgba(255,255,255,.06); }
+body[data-theme="dark"] .layer-row.active{ background:rgba(255,255,255,.10); }
+body[data-theme="dark"] .ltab[aria-selected="true"]{ background:rgba(255,255,255,.07); }
+body[data-theme="dark"] .legend .li{ background:var(--panel); }
+body[data-theme="dark"] .menu{ background:var(--panel); }
+body[data-theme="dark"] .tbtn{ background:var(--panel); color:var(--text); }
+body[data-theme="dark"] .tbtn.primary{ background:var(--text); color:var(--paper); }
+body[data-theme="dark"] .toggle{ background:var(--panel); color:var(--muted); }
+body[data-theme="dark"] .toggle[aria-pressed="true"]{ background:rgba(255,255,255,.10); color:var(--text); }
+body[data-theme="dark"] .iconbtn{ background:var(--panel); color:var(--text); }
+body[data-theme="dark"] .keycap{ background:#2b2b2e; }
+body[data-theme="dark"] .scope-note.allapps{ background:rgba(255,255,255,.04); }
+body[data-theme="dark"] .key.layer-locked{ background:#46443f; border-color:#5a574f; }
+body[data-theme="dark"] .key.layer-locked .k-main{ color:#d8d4cc; }
+body[data-theme="dark"] .key .k-hold{ color:#b8b4ab; }
+body[data-theme="dark"] .stage-head .legend-hold{ color:var(--muted); }
+body[data-theme="dark"] .modal-bg{ background:rgba(0,0,0,.55); }
+
+@media (max-width: 1100px) { .body { grid-template-columns: 210px 1fr 270px; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <h1>Keyboard Layout Studio</h1>
+      <span class="ver" id="verTag">v0.22.0</span>
+      <span class="kb">MacBook Pro 16" JIS</span>
+    </div>
+    <div class="spacer"></div>
+    <span class="saved" id="savedInd" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="savedTxt">自動保存（この端末に保存）</span></span>
+    <button class="tbtn" id="btnUndo" title="取り消し (⌘Z)" aria-label="取り消し">↩︎</button>
+    <button class="tbtn" id="btnRedo" title="やり直し (⌘⇧Z)" aria-label="やり直し">↪︎</button>
+    <button class="tbtn write off" id="btnWrite" title="Karabiner-Elements に直接反映" aria-label="Karabinerに書き込む">⌨︎ Karabinerに書き込む</button>
+    <div class="menu-wrap">
+      <button class="tbtn" id="btnExportMenu" aria-haspopup="true" aria-expanded="false">⬇ 書き出し ▾</button>
+      <div class="menu" id="exportMenu">
+        <button data-act="karabiner">⌨︎ Karabiner JSON <small>（complex_modifications）</small></button>
+        <button data-act="vimium">🌐 Vimium 設定 JSON</button>
+        <div class="sep"></div>
+        <button data-act="project">💾 プロジェクト保存（JSON）</button>
+        <button data-act="import">📂 プロジェクト読込</button>
+        <div class="sep"></div>
+        <button data-act="reset" class="danger" style="color:#c0392b">↺ 初期配列に戻す</button>
+      </div>
+    </div>
+    <input type="file" id="fileInput" accept="application/json" hidden />
+  </header>
+
+  <div class="body">
+    <!-- LEFT -->
+    <aside class="pane left">
+      <nav class="ltabs" role="tablist" aria-label="編集対象">
+        <button class="ltab" role="tab" data-ltab="layers" aria-selected="true">Layers <span class="badge" id="layerCount">0</span></button>
+        <button class="ltab" role="tab" data-ltab="combos" aria-selected="false">Combos <span class="badge" id="comboCount">0</span></button>
+        <button class="ltab" role="tab" data-ltab="fns" aria-selected="false">機能 <span class="badge" id="fnCount">0</span></button>
+      </nav>
+      <section id="tab-layers">
+        <div class="lhead"><span>Layers</span><button class="iconbtn" id="addLayer" title="レイヤー追加">＋</button></div>
+        <div class="layer-list" id="layerList"></div>
+        <p class="hint">行クリックで編集対象レイヤーを切替。⚙ で名前・色・トリガー・削除。トリガー = そのレイヤーを起動するキー（例: 英数 長押し）。</p>
+      </section>
+      <section id="tab-combos" hidden>
+        <div class="lhead"><span>Combos</span></div>
+        <div class="combo-list" id="comboList"></div>
+        <div class="miniform">
+          <input id="comboKeys" placeholder="同時押しキー 例: J K" />
+          <div class="row2"><input id="comboOut" placeholder="出力 例: Esc" /><button class="tbtn" id="addCombo">追加</button></div>
+        </div>
+        <p class="hint">複数キー同時押しで 1 つの出力。Karabiner の simultaneous に対応。</p>
+      </section>
+      <section id="tab-fns" hidden>
+        <div class="lhead"><span>機能ライブラリ</span><button class="iconbtn" id="addCat" title="カテゴリ追加">＋</button></div>
+        <div class="fn-groups" id="fnGroups"></div>
+        <div class="miniform">
+          <input id="fnLabel" placeholder="機能名 例: 部分スクショ" />
+          <div class="row2"><select id="fnCat"></select><button class="tbtn" id="addFn">追加</button></div>
+        </div>
+        <p class="hint">「自分が使う機能」をカテゴリ分けして登録。Key Config の Tap/Hold で選べる。機能をドラッグしてキーに乗せても割当可。</p>
+      </section>
+    </aside>
+
+    <!-- CENTER -->
+    <main class="pane center">
+      <div class="controls">
+        <div class="appsel">
+          <label for="appSelect">適用アプリ</label>
+          <select id="appSelect"></select>
+          <button class="iconbtn" id="addApp" title="アプリ追加">＋</button>
+        </div>
+        <div class="spacer" style="flex:1"></div>
+        <button class="toggle" id="keyNameToggle" aria-pressed="false" title="物理キー名を全レイヤーで薄く表示">キー名</button>
+        <button class="toggle" id="diffToggle" aria-pressed="false">Diff（baseとの差分）</button>
+        <button class="tbtn" id="btnSettings" title="表示設定（フォント・文字サイズ・濃さ・配色・テーマ）">⚙ 表示設定</button>
+      </div>
+      <div class="caption" id="caption" aria-live="polite"></div>
+      <div class="kb-stage">
+        <div class="stage-head">
+          <span class="title" id="stageTitle">Layer 0 – base.</span>
+          <span class="legend-hold"><span class="box"></span>グレー枠：長押し</span>
+        </div>
+        <div class="kb-wrap"><div class="keyboard" id="keyboard"></div></div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </main>
+
+    <!-- RIGHT -->
+    <aside class="pane right">
+      <div class="cfg" id="cfg"><div class="empty"><span class="big">⌨︎</span>キーをクリックして<br>役割を設定</div></div>
+    </aside>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+
+<script>
+"use strict";
+(() => {
+  const VERSION = "0.22.0";
+  const STORE_KEY = "kb-layout-studio:v2";  // v2: 配列120桁補正・既定コンボ削除に伴い旧テスト保存を破棄
+
+  /* ===== 物理配列: 実機 MacBook 16" JIS（提示画像#2）を完全再現。左端は階段配置。 ===== */
+  const ROWS = [
+    // function: esc12(1.5u) + F1-F12(8×12=96) + 電源12 = 120
+    [["esc",12,"modwide","esc"],["F1",8,"modwide"],["F2",8,"modwide"],["F3",8,"modwide"],["F4",8,"modwide"],["F5",8,"modwide"],["F6",8,"modwide"],["F7",8,"modwide"],["F8",8,"modwide"],["F9",8,"modwide"],["F10",8,"modwide"],["F11",8,"modwide"],["F12",8,"modwide"],["⏻",12,"modwide","touchid"]],
+    // 数字段: 13×8(104) + delete16(2u) = 120
+    [["1",8],["2",8],["3",8],["4",8],["5",8],["6",8],["7",8],["8",8],["9",8],["0",8],["-",8],["^",8],["¥",8],["delete",16,"modwide","bs"]],
+    // Q段: tab12(1.5u) + 12×8(96) + Return上段12(1.5u) = 120 / Q@col13
+    [["tab",12,"modwide","tab"],["Q",8],["W",8],["E",8],["R",8],["T",8],["Y",8],["U",8],["I",8],["O",8],["P",8],["@",8],["[",8,"","lbracket"],["return",12,"modwide ret-top","ret-top"]],
+    // A段: control14(1.75u) + 12×8(96)=110 + Return下段10(1.25u,111-120) = 120 / A@col15（Qより右=階段）
+    [["control",14,"modwide","ctrl"],["A",8],["S",8],["D",8],["F",8],["G",8],["H",8],["J",8],["K",8],["L",8],[";",8],[":",8],["]",8],["return",10,"modwide ret-bot","ret"]],
+    // Z段: 左shift18(2.25u) + 11×8(88) + 右shift14(1.75u) = 120 / Z@col19（Aより右=階段）
+    [["shift",18,"modwide","shift-l"],["Z",8],["X",8],["C",8],["V",8],["B",8],["N",8],["M",8],[",",8],[".",8],["/",8],["_",8],["shift",14,"modwide","shift-r"]],
+    // 最下段: control8 option8 ⌘10 英数8 space36(4.5u) かな8 ⌘10 fn8 ←8 ↑↓8(半キー縦積) →8 = 120（実機: fnは右⌘の右）
+    [["control",8,"modwide","ctrl-r"],["option",8,"modwide","opt"],["⌘",10,"modwide","cmd-l"],["英数",8,"modwide","eisu"],["space",36,"modwide","space"],["かな",8,"modwide","kana"],["⌘",10,"modwide","cmd-r"],["fn",8,"modwide","fn"],["←",8,"modwide","arr-l"],["↑↓",8,"arrow-stack","arr-ud"],["→",8,"modwide","arr-r"]]
+  ];
+  const KEY_DEFS = [];
+  ROWS.forEach((row, ri) => { let col = 1; row.forEach(([base, units, kind = "", id]) => { KEY_DEFS.push({ id: id || base, base, units, kind, row: ri, col }); col += units; }); });
+
+  const LAYER_COLORS = ["#8B6F47","#FF8C42","#2196F3","#4CAF50","#9C27B0","#E91E63","#009688","#FF5722","#607D8B","#795548","#3F51B5","#F9A825"];
+  const CAT_COLORS = { "矢印":"#248a3d","数字":"#5a3fa3","記号":"#b8860b","コマンド":"#e8601a","タブ":"#0055cc","スクショ":"#248a3d","ズーム":"#5a3fa3","音量":"#b8005c","クリップ":"#b8860b","パスワード":"#cc0000","Chrome":"#0055cc","ウィンドウ":"#007070","Notion":"#006090","Web":"#2196F3","ナビ":"#555555","動画":"#b8005c","修飾":"#1A1A1A","未分類":"#9AA0A6" };
+
+  /* ===== 初期データ（龍偉の現行 MacBook JIS 配列をプリロード） ===== */
+  function defaultData() {
+    const categories = Object.keys(CAT_COLORS).map(name => ({ id:"cat-"+name, name, color:CAT_COLORS[name] }));
+    const functions = [];
+    [["⌘+Enter（送信）","コマンド"],["部分スクショ","スクショ"],["全体スクショ","スクショ"],["Notionスクショ","スクショ"],["画面拡大","ズーム"],["画面縮小","ズーム"],["音量↑","音量"],["音量↓","音量"],["Paste","クリップ"],["Clippy","クリップ"],["1Password","パスワード"],["NotebookLM","Notion"],["All-In","Notion"],["PiP","動画"],["前タブ","タブ"],["次タブ","タブ"],["タブ復活","タブ"],["タブ検索","タブ"],["左分割","ウィンドウ"],["右分割","ウィンドウ"],["シークレット","Chrome"],["アカウント","Chrome"],["戻る(⌘←)","ナビ"],["Calendar","Web"],["X(Twitter)","Web"],["Gemini","Web"],["YouTube","Web"],["Gmail","Web"],["JARA Rower","Web"]].forEach(([l,c]) => functions.push({ id:"fn-"+functions.length, label:l, category:c }));
+
+    const layers = [
+      { id:"base",   name:"base",   index:0, color:LAYER_COLORS[0], trigger:{keyId:null, hold:true} },
+      { id:"layer1", name:"Layer1 英数長押し", index:1, color:LAYER_COLORS[1], trigger:{keyId:"eisu", hold:true} },
+      { id:"layer3", name:"Layer3 かな長押し", index:2, color:LAYER_COLORS[2], trigger:{keyId:"kana", hold:true} },
+      { id:"vimium", name:"Vimium (Chrome)",  index:3, color:LAYER_COLORS[3], trigger:{keyId:null, hold:false} }
+    ];
+    const apps = [
+      { id:"__all__", name:"全アプリ", bundleId:"" },
+      { id:"chrome",  name:"Google Chrome", bundleId:"com.google.Chrome" },
+      { id:"notion",  name:"Notion", bundleId:"notion.id" },
+      { id:"slack",   name:"Slack", bundleId:"com.tinyspeck.slackmacgap" },
+      { id:"finder",  name:"Finder", bundleId:"com.apple.finder" }
+    ];
+    const b = (tap, category="未分類", hold="", holdType="none", note="") => ({ tap, hold, holdType, category, note });
+    const bindings = { base:{__all__:{}}, layer1:{__all__:{}}, layer3:{__all__:{}}, vimium:{__all__:{}} };
+
+    Object.assign(bindings.base.__all__, {
+      "eisu":  b("Enter","修飾","","layer","単押し→Enter / 長押し→Layer1"),
+      "kana":  b("Delete","修飾","","layer","単押し→Delete / 長押し→Layer3"),
+      "space": b("Space","修飾","⇧ Shift","mod","単押し→Space / 長押し→Shift"),
+      "cmd-l": b("英数","修飾","⌘ Command","mod","単押し→英数(IME) / 長押し→⌘"),
+      "cmd-r": b("かな","修飾","⌘ Command","mod","単押し→かな(IME) / 長押し→⌘"),
+      "ctrl":  b("Control","修飾","","none","caps位置 → Control")
+    });
+    bindings.base.__all__["eisu"].holdLayer = "layer1";
+    bindings.base.__all__["kana"].holdLayer = "layer3";
+    bindings.base.__all__["kana"].repeatOnRetap = true;   // かな単押し→直後の長押しでDelete連続（Layer3は維持）
+    bindings.base.__all__["kana"].note = "単押し→Delete / 直後に長押し→Delete連続 / 通常長押し→Layer3";
+
+    const L1 = {"E":["⌘+Enter","コマンド"],"R":["↑","矢印"],"T":["!","記号"],"Y":["?","記号"],"U":["-","記号"],"I":["7","数字"],"O":["8","数字"],"P":["9","数字"],"D":["←","矢印"],"F":["↓","矢印"],"G":["→","矢印"],"H":[",","記号"],"J":[".","記号"],"K":["4","数字"],"L":["5","数字"],";":["6","数字"],"V":["前タブ","タブ"],"B":["次タブ","タブ"],"N":["0","数字"],"M":["1","数字"],",":["2","数字"],".":["3","数字"],"/":[".","記号"]};
+    Object.entries(L1).forEach(([k,[t,c]]) => bindings.layer1.__all__[k] = b(t,c));
+    bindings.layer1.__all__["kana"] = b("Delete","コマンド","","none","英数を押しながら かな で連続Delete（慣れるまでの保険）");
+    const L3 = {"E":["画面拡大","ズーム"],"T":["タブ復活","タブ"],"U":["NotebookLM","Notion"],"I":["音量↑","音量"],"P":["PiP","動画"],"A":["タブ検索","タブ"],"S":["Notionスクショ","Notion"],"D":["画面縮小","ズーム"],"G":["部分スクショ","スクショ"],"H":["全体スクショ","スクショ"],"J":["All-In","Notion"],"K":["音量↓","音量"],"L":["Paste","クリップ"],"X":["1Password","パスワード"],"C":["戻る(⌘←)","ナビ"],"V":["Clippy","クリップ"],"N":["シークレット","Chrome"],"M":["アカウント","Chrome"],",":["左分割","ウィンドウ"],".":["右分割","ウィンドウ"]};
+    Object.entries(L3).forEach(([k,[t,c]]) => bindings.layer3.__all__[k] = b(t,c));
+    const VIM = {"C":["Calendar","Web"],"T":["X(Twitter)","Web"],"J":["Gemini","Web"],"Y":["YouTube","Web"],"B":["JARA Rower","Web"],"M":["Gmail","Web"],"K":["最初タブ(⇧K)","タブ"],"I":["最後タブ(⇧I)","タブ"],"L":["次タブ(⇧L)","タブ"],",":["戻る","ナビ"],".":["進む","ナビ"],"G":["最下部(⇧G)","ナビ"]};
+    Object.entries(VIM).forEach(([k,[t,c]]) => bindings.vimium.__all__[k] = b(t,c,"","none","Chrome内のみ動作"));
+
+    const combos = [];  // デフォルトのコンボは無し（J/K のマーカーを出さない）
+    const settings = { keyFontScale:1, fontFamily:"system", showKeyNames:false, baseCharStrength:34, theme:{ mode:"light", paper:"#F4F1EA", panel:"#FFFFFF", text:"#111111", line:"#E0DDD5", muted:"#5A5E6B", faint:"#666D7A", stage:"#D8D5CE", keyBg:"#FFFFFF", keyText:"#111111", groove:"#DAD7CF", holdBorder:"#706D64", accent:"#E8762A" } };
+    return { meta:{ name:"My JIS Layout", keyboard:"MacBook Pro 16 JIS", schema:1, version:VERSION, updated:Date.now() }, layers, apps, categories, functions, bindings, combos, settings };
+  }
+
+  /* ===== 状態 / 永続化 / Undo-Redo ===== */
+  const ui = { tab:"layers", activeLayer:"base", activeApp:"__all__", selectedKey:null, diff:false };
+  let data = load() || defaultData();
+  let past = [], future = [];
+  let serverAvailable = false;
+
+  const snapshot = () => JSON.stringify(data);
+  const pushHistory = () => { past.push(snapshot()); if (past.length > 80) past.shift(); future = []; };
+  function commit(markSaved = true){ data.meta.updated = Date.now(); save(); refreshAll(); updateUndoButtons(); if (markSaved) flashSaved(); }
+  function undo(){ if(!past.length) return; future.push(snapshot()); data = JSON.parse(past.pop()); save(); reconcileUI(); refreshAll(); updateUndoButtons(); flashSaved(); }
+  function redo(){ if(!future.length) return; past.push(snapshot()); data = JSON.parse(future.pop()); save(); reconcileUI(); refreshAll(); updateUndoButtons(); flashSaved(); }
+  function updateUndoButtons(){ $("btnUndo").disabled = !past.length; $("btnRedo").disabled = !future.length; }
+  function reconcileUI(){ if(!data.layers.some(l=>l.id===ui.activeLayer)) ui.activeLayer = data.layers[0].id; if(!data.apps.some(a=>a.id===ui.activeApp)) ui.activeApp="__all__"; if(ui.selectedKey && !KEY_DEFS.some(k=>k.id===ui.selectedKey)) ui.selectedKey=null; }
+  function save(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(data)); }catch(e){} }
+  function load(){ try{ const s=localStorage.getItem(STORE_KEY); if(!s) return null; const obj=JSON.parse(s); return sanitizeData(obj)?obj:null; }catch(e){ return null; } }
+  // データ健全化: スキーマ検証 + 欠損補完 + 孤立 holdLayer 参照の解消（破損→起動不能/白紙化を防ぐ）
+  function sanitizeData(d){
+    if(!d || !Array.isArray(d.layers) || !d.layers.length || !d.bindings || typeof d.bindings!=="object") return false;
+    if(!d.meta || typeof d.meta!=="object") d.meta={ name:"Layout", keyboard:"MacBook Pro 16 JIS", schema:1, version:VERSION, updated:Date.now() };
+    d.apps = (Array.isArray(d.apps)&&d.apps.length) ? d.apps : [{id:"__all__",name:"全アプリ",bundleId:""}];
+    if(!d.apps.some(a=>a.id==="__all__")) d.apps.unshift({id:"__all__",name:"全アプリ",bundleId:""});
+    d.categories = Array.isArray(d.categories) ? d.categories : [];
+    d.functions  = Array.isArray(d.functions)  ? d.functions  : [];
+    d.combos     = Array.isArray(d.combos)     ? d.combos     : [];
+    if(!d.settings || typeof d.settings!=="object") d.settings={};
+    d.settings.keyFontScale = d.settings.keyFontScale || 1;
+    d.settings.fontFamily   = d.settings.fontFamily   || "system";
+    d.settings.showKeyNames = !!d.settings.showKeyNames;
+    d.settings.baseCharStrength = (typeof d.settings.baseCharStrength==="number") ? d.settings.baseCharStrength : 34;
+    d.settings.theme = Object.assign({ mode:"light", paper:"#F4F1EA", panel:"#FFFFFF", text:"#111111", line:"#E0DDD5", muted:"#5A5E6B", faint:"#666D7A", stage:"#D8D5CE", keyBg:"#FFFFFF", keyText:"#111111", groove:"#DAD7CF", holdBorder:"#706D64", accent:"#E8762A" }, d.settings.theme||{});
+    const ids=new Set(d.layers.map(l=>l.id));
+    Object.values(d.bindings).forEach(appMap=>{ if(!appMap||typeof appMap!=="object") return; Object.values(appMap).forEach(keyMap=>{ if(!keyMap||typeof keyMap!=="object") return; Object.values(keyMap).forEach(bd=>{ if(bd && bd.holdType==="layer" && (!bd.holdLayer||!ids.has(bd.holdLayer))){ bd.holdType="none"; bd.holdLayer=undefined; bd.hold=""; } }); }); });
+    // 移行: かな の「タップ直後の長押しで連続Delete」と Layer1 かな=Delete を既存保存にも補完
+    try {
+      const bk=d.bindings.base&&d.bindings.base.__all__&&d.bindings.base.__all__.kana;
+      if(bk && bk.repeatOnRetap===undefined) bk.repeatOnRetap=true;
+      if(d.bindings.layer1&&d.bindings.layer1.__all__&&!d.bindings.layer1.__all__.kana)
+        d.bindings.layer1.__all__.kana={ tap:"Delete", hold:"", holdType:"none", category:"コマンド", note:"英数+かなで連続Delete" };
+    } catch(e){}
+    return true;
+  }
+  let savedTimer = null;
+  function flashSaved(){ const ind=$("savedInd"), txt=$("savedTxt"); ind.classList.add("dirty"); txt.textContent="保存中…"; clearTimeout(savedTimer); savedTimer=setTimeout(()=>{ ind.classList.remove("dirty"); txt.textContent="自動保存（この端末に保存）"; },450); }
+
+  /* ===== ヘルパ ===== */
+  const $ = id => document.getElementById(id);
+  const keyboard = $("keyboard");
+  const layerById = id => data.layers.find(l => l.id === id);
+  const appById = id => data.apps.find(a => a.id === id);
+  const catColor = name => (data.categories.find(c => c.name === name) || {}).color || "#9AA0A6";
+  const baseOf = keyId => { const k = KEY_DEFS.find(x=>x.id===keyId); return k?k.base:keyId; };
+  const shortLayer = layer => layer ? (layer.name.split(/[ 　]/)[0] || layer.name) : "";
+  function rawBinding(layerId, appId, keyId){ const L=data.bindings[layerId]; if(!L) return null; const A=L[appId]; if(!A) return null; return A[keyId]||null; }
+  function getBinding(layerId, appId, keyId){ if(appId!=="__all__"){ const o=rawBinding(layerId,appId,keyId); if(o) return Object.assign({},o,{_scoped:true}); } const base=rawBinding(layerId,"__all__",keyId); if(base) return Object.assign({},base,{_scoped:false}); return null; }
+  function setBinding(layerId, appId, keyId, patch){
+    pushHistory();
+    const L=data.bindings[layerId]||(data.bindings[layerId]={}); const A=L[appId]||(L[appId]={});
+    const cur=A[keyId]||{tap:"",hold:"",holdType:"none",category:"未分類",note:""};
+    const next=Object.assign({},cur,patch);
+    const empty=!next.tap && next.holdType==="none" && !next.note;  // holdType=layer/mod は tap 空でも保持（データ消失防止）
+    if(empty) delete A[keyId]; else A[keyId]=next;
+    commit();
+  }
+  function clearBinding(layerId, appId, keyId){ pushHistory(); const A=(data.bindings[layerId]||{})[appId]; if(A) delete A[keyId]; commit(); }
+  function holdLabel(bind){ if(!bind||bind.holdType==="none") return ""; if(bind.holdType==="mod"){ const w=(bind.hold||"").split(" ").slice(1).join(" ")||bind.hold||""; return ({Command:"Cmd",Control:"Ctrl",Option:"Opt",Shift:"Shift"})[w]||w; } if(bind.holdType==="layer"){ return shortLayer(layerById(bind.holdLayer)); } return ""; }
+  const isComboKey = keyId => data.combos.some(cm => cm.keyIds.includes(keyId) && cm.layers.includes(ui.activeLayer));
+  function countAssigned(layerId, appId){ const L=data.bindings[layerId]||{}; const merged=Object.assign({}, L.__all__||{}, appId!=="__all__"?(L[appId]||{}):{}); return Object.values(merged).filter(x=>x.tap).length; }
+  const esc = s => String(s==null?"":s).replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+  const cssEsc = s => String(s).replace(/["\\]/g,"\\$&");
+  const tint = (hex,a) => { const c=hex.replace("#",""); return `rgba(${parseInt(c.slice(0,2),16)},${parseInt(c.slice(2,4),16)},${parseInt(c.slice(4,6),16)},${a})`; };
+
+  /* ===== レンダリング ===== */
+  function refreshAll(){
+    applySettings();
+    renderTabsCount(); renderLayerList(); renderComboList(); renderFnGroups(); renderAppSelect();
+    renderStageHead(); renderCaption(); renderKeyboard(); renderLegend(); renderConfig(); fitRowHeight();
+    const knt=$("keyNameToggle"); if(knt) knt.setAttribute("aria-pressed", !!(data.settings&&data.settings.showKeyNames));
+    $("verTag").textContent = "v"+VERSION; if(data.meta) data.meta.version = VERSION;
+  }
+  function renderTabsCount(){ $("layerCount").textContent=data.layers.length; $("comboCount").textContent=data.combos.length; $("fnCount").textContent=data.functions.length; }
+
+  function renderLayerList(){
+    const list=$("layerList"); list.innerHTML="";
+    data.layers.forEach(l => {
+      const row=document.createElement("div");
+      row.className="layer-row"+(l.id===ui.activeLayer?" active":"");
+      row.innerHTML=`<span class="ldot" style="background:${l.color}"></span><span class="lname" title="${esc(l.name)}">${esc(l.name)}</span>${l.trigger&&l.trigger.keyId?`<span class="ltrig">${esc(baseOf(l.trigger.keyId))}${l.trigger.hold?" 長押":""}</span>`:""}<span class="lidx">${l.index}</span><button class="lgear" title="設定" data-gear="${l.id}">⚙</button>`;
+      row.addEventListener("click", e => { if(e.target.dataset.gear){ openLayerModal(l.id); return; } ui.activeLayer=l.id; refreshAll(); });
+      list.appendChild(row);
+    });
+  }
+  function renderComboList(){
+    const list=$("comboList"); list.innerHTML="";
+    if(!data.combos.length){ list.innerHTML=`<p class="hint" style="padding:4px 2px">コンボ未登録</p>`; return; }
+    data.combos.forEach(cm => {
+      const it=document.createElement("div"); it.className="combo-item";
+      it.innerHTML=`<span class="ckeys">${cm.keyIds.map(esc).join("+")}</span><span class="carrow">→</span><span class="cout">${esc(cm.output)}</span><button class="del" title="削除">✕</button>`;
+      it.querySelector(".del").addEventListener("click", ()=>{ pushHistory(); data.combos=data.combos.filter(x=>x.id!==cm.id); commit(); });
+      list.appendChild(it);
+    });
+  }
+  function renderFnGroups(){
+    const wrap=$("fnGroups"); wrap.innerHTML="";
+    $("fnCat").innerHTML=data.categories.map(c=>`<option>${esc(c.name)}</option>`).join("");
+    const byCat=new Map(); data.functions.forEach(f=>{ if(!byCat.has(f.category)) byCat.set(f.category,[]); byCat.get(f.category).push(f); });
+    byCat.forEach((fns,cat)=>{
+      const t=document.createElement("div"); t.className="fn-group-title";
+      t.innerHTML=`<span class="gd" style="background:${catColor(cat)}"></span>${esc(cat)} <span style="opacity:.6">(${fns.length})</span>`; wrap.appendChild(t);
+      fns.forEach(f=>{
+        const it=document.createElement("div"); it.className="fn-item draggable"; it.draggable=true;
+        it.innerHTML=`<span class="fl">${esc(f.label)}</span><button class="del" title="削除">✕</button>`;
+        it.addEventListener("dragstart", e=>{ e.dataTransfer.setData("text/fn", f.id); });
+        it.querySelector(".del").addEventListener("click", ()=>{ pushHistory(); data.functions=data.functions.filter(x=>x.id!==f.id); commit(); });
+        wrap.appendChild(it);
+      });
+    });
+  }
+  function renderAppSelect(){ const sel=$("appSelect"); sel.innerHTML=data.apps.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join(""); sel.value=ui.activeApp; }
+  function renderStageHead(){
+    const l=layerById(ui.activeLayer); if(!l) return;
+    const title = l.id==="base" ? "Layer 0 – Base." : `Layer ${l.index} – ${l.name}`;
+    $("stageTitle").textContent = title;
+  }
+  function renderCaption(){
+    const l=layerById(ui.activeLayer), app=appById(ui.activeApp);
+    let txt = l.id==="base"
+      ? `<strong>base</strong>: 通常入力。英数=単押しEnter/長押しLayer1、space=単押しSpace/長押しShift、かな=単押しDelete/長押しLayer3、左⌘=英数 右⌘=かな。`
+      : (l.trigger&&l.trigger.keyId ? `<strong>${esc(l.name)}</strong>: 「${esc(baseOf(l.trigger.keyId))}」キー${l.trigger.hold?"長押し":"押下"}中に有効。` : `<strong>${esc(l.name)}</strong>。`);
+    txt += ` 割当 ${countAssigned(ui.activeLayer,ui.activeApp)} キー。`;
+    if(app.id!=="__all__") txt += ` <strong>${esc(app.name)}</strong> 専用の上書きを編集中（青ドット=このアプリ固有）。`;
+    $("caption").innerHTML = txt;
+  }
+
+  function renderKeyboard(){ keyboard.innerHTML=""; KEY_DEFS.forEach(def => keyboard.appendChild(makeKey(def))); }
+
+  function makeKey(def){
+    const btn=document.createElement("button");
+    btn.type="button"; btn.className="key "+(def.kind||""); btn.style.gridColumn=def.col+" / span "+def.units; btn.style.gridRow=String(def.row+1); btn.dataset.key=def.id;
+    const isBase = ui.activeLayer==="base";
+    const bind = getBinding(ui.activeLayer, ui.activeApp, def.id);
+    const baseBind = getBinding("base","__all__",def.id);
+
+    if(def.id==="arr-ud"){ btn.classList.add("arrow-stack"); btn.innerHTML=`<span class="half">▲</span><span class="half">▼</span>`; btn.setAttribute("aria-label","上下矢印"); attachKeyEvents(btn,def); return btn; }
+    if(def.id==="ret-top"){ btn.classList.add("ret-top"); btn.setAttribute("aria-hidden","true"); btn.addEventListener("click",()=>{ const r=keyboard.querySelector('[data-key="ret"]'); if(r) r.click(); }); return btn; }
+
+    // レイヤー起動キー（このレイヤーを押しっぱなしで起動）→ このレイヤー内では割当不可・濃いグレーでロック
+    const curLayer = layerById(ui.activeLayer);
+    const isOwnTrigger = curLayer && curLayer.id!=="base" && curLayer.trigger && curLayer.trigger.hold && curLayer.trigger.keyId===def.id;
+    if(isOwnTrigger){
+      btn.classList.add("layer-locked");
+      const mn=document.createElement("span"); mn.className="k-main"; mn.textContent=def.base;
+      btn.append(mn);
+      if(ui.selectedKey===def.id) btn.classList.add("selected");
+      btn.setAttribute("aria-label", def.base+"キー：このレイヤー("+curLayer.name+")の起動キー。押しっぱなしのため割当不可");
+      btn.addEventListener("click", ()=>{ ui.selectedKey=def.id; document.querySelectorAll("#keyboard .selected").forEach(k=>k.classList.remove("selected")); btn.classList.add("selected"); renderConfig(); });
+      return btn;
+    }
+
+    const main = bind && bind.tap ? bind.tap : (isBase ? def.base : "");
+    const hold = holdLabel(bind);
+
+    const holdEl=document.createElement("span"); holdEl.className="k-hold"; holdEl.textContent=hold;
+    const mainEl=document.createElement("span"); mainEl.className="k-main"; mainEl.textContent=main;
+    btn.append(holdEl, mainEl);
+    // キー名オーバーレイ（全レイヤーで物理キー名を薄く・ON/OFF）。mainと重複する基底英字では出さない
+    if(data.settings && data.settings.showKeyNames && main!==def.base){ const ref=document.createElement("span"); ref.className="k-ref"; ref.textContent=def.base; ref.setAttribute("aria-hidden","true"); btn.appendChild(ref); }
+
+    if(hold) btn.classList.add("hold");                 // グレー枠 = 長押し
+    if(!(bind && bind.tap) && !isBase) btn.classList.add("dim");
+    // カテゴリ色ドット（function レイヤーで割当ありの時）
+    if(bind && bind.tap && !isBase){ btn.classList.add("cat-dot"); btn.style.setProperty("--cdot", catColor(bind.category)); }
+    // トリガーキー強調
+    const trigLayer = data.layers.find(L => L.trigger && L.trigger.keyId===def.id && L.id===ui.activeLayer);
+    if(trigLayer){ btn.classList.add("trigger"); btn.style.setProperty("--tc", trigLayer.color); }
+    // アプリ固有 override
+    if(bind && bind._scoped){ btn.classList.add("app-override"); const d=document.createElement("span"); d.className="ovr"; btn.appendChild(d); }
+    // combo
+    if(isComboKey(def.id)){ btn.classList.add("combo-key"); const c=document.createElement("span"); c.className="cmb"; c.textContent="⧉"; btn.appendChild(c); }
+    // Diff
+    if(ui.diff && !isBase){ const cur=bind?bind.tap:"", bas=baseBind?baseBind.tap:""; if(cur!==bas) btn.classList.add("diff-hit"); }
+    if(ui.selectedKey===def.id) btn.classList.add("selected");
+    btn.setAttribute("aria-label", `${def.base}キー ${layerById(ui.activeLayer).name} ${main?("単押し "+main):"割当なし"}${hold?(" 長押し "+hold):""}`);
+    attachKeyEvents(btn, def);
+    return btn;
+  }
+  function attachKeyEvents(btn, def){
+    btn.addEventListener("click", ()=>{ ui.selectedKey=def.id; document.querySelectorAll("#keyboard .selected").forEach(k=>k.classList.remove("selected")); btn.classList.add("selected"); renderConfig(); });
+    btn.addEventListener("dragover", e=>e.preventDefault());
+    btn.addEventListener("drop", e=>{ e.preventDefault(); const fnId=e.dataTransfer.getData("text/fn"); if(!fnId) return; const f=data.functions.find(x=>x.id===fnId); if(!f) return; setBinding(ui.activeLayer,ui.activeApp,def.id,{tap:f.label,category:f.category}); ui.selectedKey=def.id; });
+  }
+
+  function renderLegend(){
+    const lg=$("legend"); lg.innerHTML="";
+    const L=data.bindings[ui.activeLayer]||{}; const merged=Object.assign({}, L.__all__||{}, ui.activeApp!=="__all__"?(L[ui.activeApp]||{}):{});
+    const counts=new Map(); Object.values(merged).forEach(x=>{ if(x.tap) counts.set(x.category,(counts.get(x.category)||0)+1); });
+    if(!counts.size){ lg.innerHTML=`<span class="li" style="border-style:dashed;color:#9AA0A6">このレイヤーは未割当</span>`; return; }
+    [...counts.entries()].sort((a,b)=>b[1]-a[1]).forEach(([cat,n])=>{ const s=document.createElement("span"); s.className="li"; s.innerHTML=`<span class="sw" style="background:${catColor(cat)}"></span>${esc(cat)} ${n}`; lg.appendChild(s); });
+  }
+
+  /* ===== Key Config ===== */
+  function renderConfig(){
+    const cfg=$("cfg");
+    if(!ui.selectedKey){ cfg.innerHTML=`<div class="empty"><span class="big">⌨︎</span>キーをクリックして<br>役割を設定</div>`; return; }
+    const def=KEY_DEFS.find(k=>k.id===ui.selectedKey), l=layerById(ui.activeLayer), app=appById(ui.activeApp);
+    // レイヤー起動キーは押しっぱなしのため、そのレイヤー内では割当不可
+    if(l && l.id!=="base" && l.trigger && l.trigger.hold && l.trigger.keyId===def.id){
+      cfg.innerHTML=`<div class="keyhead"><div class="keycap">${esc(def.base)}</div><div class="info"><b>${esc(def.base)}</b>${esc(l.name)} の起動キー</div></div>
+        <div class="scope-note">このキーは <b>${esc(l.name)} を起動するために押しっぱなし</b>にするキーです。押している間だけこのレイヤーが有効になるため、<b>このレイヤー内では機能を割り当てられません</b>（単押し/ダブルタップ等は不可）。<br>※ 他のレイヤーでは通常どおり割当できます。</div>`;
+      return;
+    }
+    const bind=getBinding(ui.activeLayer,ui.activeApp,def.id)||{tap:"",hold:"",holdType:"none",category:"未分類",note:"",_scoped:false};
+    const catOpts=data.categories.map(c=>`<option ${c.name===bind.category?"selected":""}>${esc(c.name)}</option>`).join("");
+    const fnOpts=`<option value="">— ライブラリから選ぶ —</option>`+data.functions.map(f=>`<option value="${esc(f.label)}" data-cat="${esc(f.category)}" ${f.label===bind.tap?"selected":""}>${esc(f.label)}（${esc(f.category)}）</option>`).join("");
+    const holdLayerOpts=data.layers.filter(x=>x.id!==ui.activeLayer).map(x=>`<option value="${x.id}" ${bind.holdLayer===x.id?"selected":""}>${esc(x.name)}</option>`).join("");
+    cfg.innerHTML=`
+      <div class="keyhead"><div class="keycap">${esc(def.base)}</div><div class="info"><b>${esc(def.base)}</b>${esc(l.name)} / ${def.units/8}u</div></div>
+      ${app.id!=="__all__"?`<div class="scope-note">${esc(app.name)} 専用の割当を編集中。${bind._scoped?"このキーは <b>このアプリ固有</b>の上書きあり。":"現在は全アプリ共通を継承中（編集すると固有上書きに）。"}</div>`:`<div class="scope-note allapps">全アプリ共通の割当を編集中。</div>`}
+      <div class="field"><label>機能ライブラリ</label><select id="cfgFn">${fnOpts}</select></div>
+      <div class="field"><label>Tap（単押し）</label><input id="cfgTap" value="${esc(bind.tap)}" placeholder="例: ⌘+Enter / 7 / 部分スクショ" /></div>
+      <div class="field"><label>Hold（長押し）= グレー枠</label>
+        <select id="cfgHoldType"><option value="none" ${bind.holdType==="none"?"selected":""}>なし</option><option value="mod" ${bind.holdType==="mod"?"selected":""}>修飾キー</option><option value="layer" ${bind.holdType==="layer"?"selected":""}>レイヤー起動</option></select>
+        <div id="cfgHoldWrap" ${bind.holdType==="none"?"hidden":""}>${bind.holdType==="layer"?`<select id="cfgHoldLayer" style="margin-top:6px">${holdLayerOpts}</select>`:`<select id="cfgHoldMod" style="margin-top:6px">${["⇧ Shift","⌃ Control","⌥ Option","⌘ Command"].map(m=>`<option ${bind.hold===m?"selected":""}>${m}</option>`).join("")}</select>`}</div>
+      </div>
+      ${(ui.activeLayer==="base" && bind.holdType==="layer")?`<div class="field"><label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="cfgRetap" ${bind.repeatOnRetap?"checked":""} style="width:auto;height:auto"> タップ直後の長押しで Tap を連続発火（連続Delete等）</label><div class="sub" style="font-size:11px;color:var(--faint)">いきなりの長押しは「${esc(shortLayer(layerById(bind.holdLayer))||"レイヤー")}」起動のまま維持</div></div>`:""}
+      <div class="field"><label>カテゴリ（色分け）</label><select id="cfgCat">${catOpts}</select></div>
+      <div class="field"><label>メモ</label><textarea id="cfgNote" rows="2" placeholder="補足・条件など">${esc(bind.note||"")}</textarea></div>
+      <div class="actions"><button class="tbtn danger" id="cfgClear">この割当をクリア</button>${app.id!=="__all__"&&bind._scoped?`<button class="tbtn" id="cfgDropOverride">アプリ上書き解除</button>`:""}</div>`;
+    const saveP = patch => { setBinding(ui.activeLayer,ui.activeApp,def.id,patch); ui.selectedKey=def.id; };
+    $("cfgFn").addEventListener("change", e=>{ const o=e.target.selectedOptions[0]; if(!o.value) return; saveP({tap:o.value,category:o.dataset.cat||bind.category}); });
+    $("cfgTap").addEventListener("change", e=>saveP({tap:e.target.value.trim()}));
+    $("cfgCat").addEventListener("change", e=>saveP({category:e.target.value}));
+    $("cfgNote").addEventListener("change", e=>saveP({note:e.target.value.trim()}));
+    const rt=$("cfgRetap"); if(rt) rt.addEventListener("change", e=>saveP({repeatOnRetap:e.target.checked}));
+    $("cfgHoldType").addEventListener("change", e=>{ const t=e.target.value; if(t==="none") saveP({holdType:"none",hold:"",holdLayer:undefined}); else if(t==="mod") saveP({holdType:"mod",hold:"⇧ Shift"}); else saveP({holdType:"layer",holdLayer:(data.layers.find(x=>x.id!==ui.activeLayer)||{}).id}); });
+    const hm=$("cfgHoldMod"); if(hm) hm.addEventListener("change", e=>saveP({hold:e.target.value}));
+    const hl=$("cfgHoldLayer"); if(hl) hl.addEventListener("change", e=>saveP({holdLayer:e.target.value}));
+    $("cfgClear").addEventListener("click", ()=>clearBinding(ui.activeLayer,ui.activeApp,def.id));
+    const dro=$("cfgDropOverride"); if(dro) dro.addEventListener("click", ()=>clearBinding(ui.activeLayer,ui.activeApp,def.id));
+  }
+
+  /* ===== modal: layer / app / category ===== */
+  let lastFocus=null;
+  function openModal(html){ lastFocus=document.activeElement; const m=$("modal"); m.innerHTML=html; m.setAttribute("role","dialog"); m.setAttribute("aria-modal","true"); $("modalBg").classList.add("show"); const f=m.querySelector("input,select,button,textarea"); if(f) f.focus(); }
+  function closeModal(){ $("modalBg").classList.remove("show"); $("modal").innerHTML=""; if(lastFocus&&lastFocus.focus){ try{ lastFocus.focus(); }catch(e){} } }
+  $("modalBg").addEventListener("click", e=>{ if(e.target.id==="modalBg") closeModal(); });
+  $("modalBg").addEventListener("keydown", e=>{
+    if(e.key==="Escape"){ e.preventDefault(); closeModal(); return; }
+    if(e.key==="Tab"){ const f=[...$("modal").querySelectorAll('input,select,button,textarea,[tabindex]:not([tabindex="-1"])')].filter(x=>!x.disabled&&x.offsetParent!==null); if(!f.length) return; const first=f[0], last=f[f.length-1]; if(e.shiftKey&&document.activeElement===first){ e.preventDefault(); last.focus(); } else if(!e.shiftKey&&document.activeElement===last){ e.preventDefault(); first.focus(); } }
+  });
+
+  function openLayerModal(layerId){
+    const l=layerById(layerId);
+    const trigOpts=`<option value="">なし</option>`+KEY_DEFS.map(k=>`<option value="${esc(k.id)}" ${l.trigger&&l.trigger.keyId===k.id?"selected":""}>${esc(k.base)}</option>`).join("");
+    openModal(`<h3>レイヤー設定</h3>
+      <div class="field"><label>名前</label><input id="mName" value="${esc(l.name)}" /></div>
+      <div class="field"><label>色</label><div class="swatches" id="mSwatch">${LAYER_COLORS.map(c=>`<button class="sw-pick" data-c="${c}" style="background:${c}" aria-pressed="${c===l.color}"></button>`).join("")}</div></div>
+      <div class="field"><label>トリガーキー（このレイヤーを起動するキー）</label><select id="mTrig">${trigOpts}</select>
+        <label style="margin-top:6px;display:flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" id="mHold" ${l.trigger&&l.trigger.hold?"checked":""} style="width:auto;height:auto"> 長押しで起動（layer-tap）</label></div>
+      <div class="mfoot">${l.id!=="base"?`<button class="tbtn danger" id="mDelete">削除</button>`:""}<button class="tbtn" id="mCancel">キャンセル</button><button class="tbtn primary" id="mSave">保存</button></div>`);
+    let picked=l.color;
+    document.querySelectorAll("#mSwatch .sw-pick").forEach(b=>b.addEventListener("click", ()=>{ picked=b.dataset.c; document.querySelectorAll("#mSwatch .sw-pick").forEach(x=>x.setAttribute("aria-pressed", x===b)); }));
+    $("mCancel").addEventListener("click", closeModal);
+    $("mSave").addEventListener("click", ()=>{ pushHistory(); l.name=$("mName").value.trim()||l.name; l.color=picked; const tk=$("mTrig").value; l.trigger={keyId:tk||null,hold:$("mHold").checked}; closeModal(); commit(); });
+    const del=$("mDelete"); if(del) del.addEventListener("click", ()=>{ pushHistory(); data.layers=data.layers.filter(x=>x.id!==l.id); data.layers.forEach((x,i)=>x.index=i); delete data.bindings[l.id]; if(ui.activeLayer===l.id) ui.activeLayer=data.layers[0].id; sanitizeData(data); closeModal(); commit(); });
+  }
+  function addLayer(){ pushHistory(); const idx=data.layers.length; const id="layer-"+Date.now().toString(36); data.layers.push({id,name:"Layer "+idx,index:idx,color:LAYER_COLORS[idx%LAYER_COLORS.length],trigger:{keyId:null,hold:true}}); data.bindings[id]={__all__:{}}; ui.activeLayer=id; commit(); openLayerModal(id); }
+  function addApp(){
+    openModal(`<h3>アプリを追加</h3><div class="field"><label>アプリ名</label><input id="aName" placeholder="例: Safari" /></div><div class="field"><label>Bundle ID（任意・Karabiner用）</label><input id="aBundle" placeholder="例: com.apple.Safari" /></div><div class="mfoot"><button class="tbtn" id="aCancel">キャンセル</button><button class="tbtn primary" id="aSave">追加</button></div>`);
+    $("aCancel").addEventListener("click", closeModal);
+    $("aSave").addEventListener("click", ()=>{ const name=$("aName").value.trim(); if(!name) return; pushHistory(); const id="app-"+Date.now().toString(36); data.apps.push({id,name,bundleId:$("aBundle").value.trim()}); ui.activeApp=id; closeModal(); commit(); });
+  }
+  function addCategory(){
+    const pal=["#e8601a","#0055cc","#248a3d","#5a3fa3","#b8005c","#007070","#b8860b","#cc0000","#555555","#1A1A1A"];
+    openModal(`<h3>カテゴリを追加</h3><div class="field"><label>名前</label><input id="cName" placeholder="例: 開発" /></div><div class="field"><label>色</label><div class="swatches" id="cSwatch">${pal.map((c,i)=>`<button class="sw-pick" data-c="${c}" style="background:${c}" aria-pressed="${i===0}"></button>`).join("")}</div></div><div class="mfoot"><button class="tbtn" id="cCancel">キャンセル</button><button class="tbtn primary" id="cSave">追加</button></div>`);
+    let pc=pal[0];
+    document.querySelectorAll("#cSwatch .sw-pick").forEach(b=>b.addEventListener("click", ()=>{ pc=b.dataset.c; document.querySelectorAll("#cSwatch .sw-pick").forEach(x=>x.setAttribute("aria-pressed", x===b)); }));
+    $("cCancel").addEventListener("click", closeModal);
+    $("cSave").addEventListener("click", ()=>{ const name=$("cName").value.trim(); if(!name) return; pushHistory(); data.categories.push({id:"cat-"+Date.now().toString(36),name,color:pc}); closeModal(); commit(); });
+  }
+
+  /* ===== 表示設定（フォント・文字サイズ・濃さ・キー名表示・配色テーマ） ===== */
+  const FONTS = {
+    system: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif',
+    rounded:'"SF Pro Rounded", "Hiragino Maru Gothic ProN", "Quicksand", "Noto Sans JP", sans-serif',
+    gothic: '"Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif',
+    mincho: '"Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif',
+    mono:   'ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans JP", monospace'
+  };
+  const FONT_LABELS = { system:"システム標準", rounded:"丸ゴシック", gothic:"ゴシック", mincho:"明朝", mono:"等幅" };
+  const PRESETS = {
+    ivory:    { name:"Studio Ivory",   mode:"light", paper:"#F4F1EA", panel:"#FFFFFF", text:"#111111", line:"#E0DDD5", muted:"#5A5E6B", faint:"#666D7A", stage:"#D8D5CE", keyBg:"#FFFFFF", keyText:"#111111", groove:"#DAD7CF", holdBorder:"#706D64", accent:"#E8762A" },
+    parchment:{ name:"Warm Parchment", mode:"light", paper:"#EDE8DF", panel:"#F7F3EC", text:"#2C2418", line:"#C8C3BA", muted:"#6B5E48", faint:"#8C7A5A", stage:"#CEC9C1", keyBg:"#F7F3EC", keyText:"#2C2418", groove:"#C8C3BA", holdBorder:"#8C7A5A", accent:"#B85C1A" },
+    slate:    { name:"Slate Dark",     mode:"dark",  paper:"#1C1C1E", panel:"#252527", text:"#F0EDE6", line:"#3A3733", muted:"#A9A49C", faint:"#8A857D", stage:"#363534", keyBg:"#2C2B2A", keyText:"#F0EDE6", groove:"#3E3B37", holdBorder:"#8A8580", accent:"#F0924A" },
+    terminal: { name:"Terminal Green",  mode:"dark",  paper:"#0D1117", panel:"#161B22", text:"#C9D1D9", line:"#30363D", muted:"#9DA7B3", faint:"#7D8694", stage:"#21262D", keyBg:"#1C2128", keyText:"#C9D1D9", groove:"#30363D", holdBorder:"#58A6FF", accent:"#3FB950" }
+  };
+  function applySettings(){
+    const s=data.settings||{}, t=s.theme||{}, r=document.documentElement.style;
+    r.setProperty("--key-font-family", FONTS[s.fontFamily]||FONTS.system);
+    const m={ "--paper":t.paper, "--panel":t.panel, "--text":t.text, "--line":t.line, "--muted":t.muted, "--faint":t.faint, "--stage-bg":t.stage, "--key-bg":t.keyBg, "--key-text":t.keyText, "--groove":t.groove, "--hold":t.holdBorder, "--accent":t.accent };
+    for(const k in m){ if(m[k]) r.setProperty(k, m[k]); }
+    const st=Math.max(0,Math.min(100,(typeof s.baseCharStrength==="number")?s.baseCharStrength:34));
+    const dark = t.mode==="dark";
+    r.setProperty("--ref-color", dark ? `rgba(255,255,255,${(st/100*0.55).toFixed(3)})` : `rgba(20,20,20,${(st/100*0.85).toFixed(3)})`);
+    document.body.dataset.theme = dark ? "dark" : "light";
+  }
+  function saveSettings(){ save(); applySettings(); renderKeyboard(); fitRowHeight(); flashSaved(); }
+  function openSettings(){
+    const s=data.settings, t=s.theme;
+    const fontOpts=Object.keys(FONTS).map(k=>`<option value="${k}" ${s.fontFamily===k?"selected":""}>${FONT_LABELS[k]}</option>`).join("");
+    const presetBtns=Object.entries(PRESETS).map(([k,p])=>`<button type="button" class="tbtn preset" data-preset="${k}"><span class="pv" style="background:${p.stage};border-color:${p.keyText}"></span>${esc(p.name)}</button>`).join("");
+    openModal(`<h3>表示設定</h3>
+      <div class="field"><label>機能ラベルのフォント</label><select id="setFont">${fontOpts}</select></div>
+      <div class="field"><label>キー文字サイズ <span id="setSizeV">${Math.round(s.keyFontScale*100)}%</span></label><input type="range" id="setSize" min="70" max="140" step="5" value="${Math.round(s.keyFontScale*100)}"></div>
+      <div class="field"><label>ベース(キー名)の濃さ <span id="setStrV">${s.baseCharStrength}%</span></label><input type="range" id="setStr" min="0" max="100" step="2" value="${s.baseCharStrength}"></div>
+      <div class="field"><label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="setKeyNames" ${s.showKeyNames?"checked":""} style="width:auto;height:auto"> キー名を全レイヤーで薄く表示</label></div>
+      <div class="field"><label>テーマ（配色 / ダーク）</label><div class="presets" id="setPresets">${presetBtns}</div></div>
+      <div class="field"><label>カラー微調整</label><div class="ci-grid">
+        <label class="ci">盤面<input type="color" id="cStage" value="${t.stage}"></label>
+        <label class="ci">キー<input type="color" id="cKeyBg" value="${t.keyBg}"></label>
+        <label class="ci">キー文字<input type="color" id="cKeyText" value="${t.keyText}"></label>
+        <label class="ci">長押し枠<input type="color" id="cHold" value="${t.holdBorder}"></label>
+        <label class="ci">アクセント<input type="color" id="cAccent" value="${t.accent}"></label>
+        <label class="ci">背景<input type="color" id="cPaper" value="${t.paper}"></label>
+      </div></div>
+      <div class="mfoot"><button class="tbtn danger" id="setReset">既定に戻す</button><button class="tbtn primary" id="setClose">完了</button></div>`);
+    $("setFont").addEventListener("change", e=>{ data.settings.fontFamily=e.target.value; saveSettings(); });
+    $("setSize").addEventListener("input", e=>{ data.settings.keyFontScale=Number(e.target.value)/100; $("setSizeV").textContent=e.target.value+"%"; saveSettings(); });
+    $("setStr").addEventListener("input", e=>{ data.settings.baseCharStrength=Number(e.target.value); $("setStrV").textContent=e.target.value+"%"; saveSettings(); });
+    $("setKeyNames").addEventListener("change", e=>{ data.settings.showKeyNames=e.target.checked; saveSettings(); });
+    document.querySelectorAll("#setPresets .preset").forEach(b=>b.addEventListener("click", ()=>{ data.settings.theme=Object.assign({}, PRESETS[b.dataset.preset]); saveSettings(); openSettings(); }));
+    [["cStage","stage"],["cKeyBg","keyBg"],["cKeyText","keyText"],["cHold","holdBorder"],["cAccent","accent"],["cPaper","paper"]].forEach(([id,key])=>{ $(id).addEventListener("input", e=>{ data.settings.theme[key]=e.target.value; saveSettings(); }); });
+    $("setReset").addEventListener("click", ()=>{ data.settings={ keyFontScale:1, fontFamily:"system", showKeyNames:false, baseCharStrength:34, theme:Object.assign({},PRESETS.ivory) }; saveSettings(); openSettings(); });
+    $("setClose").addEventListener("click", closeModal);
+  }
+
+  /* ===== 1u 正方形（サイズ感は MacBook 準拠） ===== */
+  function fitRowHeight(){
+    const cols=120, w=keyboard.clientWidth; if(!w) return;
+    const gap=parseFloat(getComputedStyle(keyboard).columnGap)||4;
+    const colW=(w-(cols-1)*gap)/cols; const rowH=Math.max(30, colW*8+7*gap);
+    const scale=(data.settings&&data.settings.keyFontScale)||1;
+    document.documentElement.style.setProperty("--rowh", rowH+"px");
+    document.documentElement.style.setProperty("--fmain", Math.round(rowH*0.27*scale)+"px");
+    document.documentElement.style.setProperty("--fhold", Math.round(rowH*0.20*scale)+"px");
+  }
+
+  /* ===== 書き出し: Karabiner complex_modifications ===== */
+  const KC = { "Enter":"return_or_enter","Return":"return_or_enter","Delete":"delete_or_backspace","Backspace":"delete_or_backspace","Space":"spacebar","Tab":"tab","Esc":"escape","Escape":"escape","←":"left_arrow","→":"right_arrow","↑":"up_arrow","↓":"down_arrow","英数":"japanese_eisuu","かな":"japanese_kana","音量↑":"volume_increment","音量↓":"volume_decrement","Control":"left_control","Option":"left_option","Command":"left_command","Shift":"left_shift" };
+  const MODKC = { "⇧ Shift":"left_shift","⌃ Control":"left_control","⌥ Option":"left_option","⌘ Command":"left_command" };
+  function tapToEvents(tap){
+    if(!tap) return null;
+    if(KC[tap]) return [{ key_code: KC[tap] }];
+    if(/^[a-z]$/i.test(tap)) return [{ key_code: tap.toLowerCase() }];
+    if(/^[0-9]$/.test(tap)) return [{ key_code: tap }];
+    const sym={ "-":"hyphen","^":"equal_sign","¥":"international3","@":"open_bracket","[":"close_bracket","]":"backslash",";":"semicolon",":":"quote",",":"comma",".":"period","/":"slash","_":"international1" };
+    if(sym[tap]) return [{ key_code: sym[tap] }];
+    const m=tap.match(/^([⌘⌥⌃⇧]+)\+?(.+)$/);
+    if(m){ const mods=[...m[1]].map(g=>({"⌘":"left_command","⌥":"left_option","⌃":"left_control","⇧":"left_shift"}[g])); const rest=m[2].trim(); const ev=tapToEvents(rest); if(ev&&ev[0].key_code) return [{ key_code:ev[0].key_code, modifiers:mods }]; }
+    return null; // 未マップのカスタム機能（部分スクショ等）
+  }
+  function physKC(keyId){
+    const map={ esc:"escape", bs:"delete_or_backspace", tab:"tab", ret:"return_or_enter", "shift-l":"left_shift","shift-r":"right_shift", ctrl:"left_control","ctrl-r":"right_control", opt:"left_option", fn:"fn", "cmd-l":"left_command","cmd-r":"right_command", eisu:"japanese_eisuu", kana:"japanese_kana", space:"spacebar", "arr-l":"left_arrow","arr-r":"right_arrow", touchid:"", lbracket:"close_bracket" };
+    if(map[keyId]!==undefined) return map[keyId];
+    return tapToEvents(keyId) ? tapToEvents(keyId)[0].key_code : null;
+  }
+  function buildKarabiner(){
+    const rules=[]; let mapped=0, skipped=[];
+    // base: layer-tap / mod-tap
+    const baseRule={ description:"Keyboard Layout Studio — base (layer-tap / mod-tap)", manipulators:[] };
+    Object.entries(data.bindings.base.__all__||{}).forEach(([keyId,bd])=>{
+      const from=physKC(keyId); if(!from) return;
+      if(bd.holdType==="layer" && bd.holdLayer){
+        const tapEv=tapToEvents(bd.tap)||[{key_code:from}];
+        if(bd.repeatOnRetap){
+          const rv=keyId+"_recent";
+          // ① 直近タップ後（rv=1）に押しっぱなし → tapキーを連続発火（最優先で配置）
+          baseRule.manipulators.push({ type:"basic", from:{ key_code:from, modifiers:{optional:["any"]} }, to:tapEv, conditions:[{ type:"variable_if", name:rv, value:1 }] });
+          // ② 通常: 単押し=tap(+直近フラグ・既定500msで自動解除) / 長押し=レイヤー起動
+          baseRule.manipulators.push({ type:"basic", from:{ key_code:from, modifiers:{optional:["any"]} }, to:[{ set_variable:{ name:bd.holdLayer, value:1 } }], to_after_key_up:[{ set_variable:{ name:bd.holdLayer, value:0 } }], to_if_alone:tapEv.concat([{ set_variable:{ name:rv, value:1 } }]), to_delayed_action:{ to_if_invoked:[{ set_variable:{ name:rv, value:0 } }], to_if_canceled:[{ set_variable:{ name:rv, value:0 } }] } });
+        } else {
+          baseRule.manipulators.push({ type:"basic", from:{ key_code:from, modifiers:{optional:["any"]} }, to:[{ set_variable:{ name:bd.holdLayer, value:1 } }], to_after_key_up:[{ set_variable:{ name:bd.holdLayer, value:0 } }], to_if_alone:tapEv });
+        }
+        mapped++;
+      } else if(bd.holdType==="mod" && MODKC[bd.hold]){
+        const tapEv=tapToEvents(bd.tap)||[{key_code:from}];
+        baseRule.manipulators.push({ type:"basic", from:{ key_code:from, modifiers:{optional:["any"]} }, to:[{ key_code:MODKC[bd.hold] }], to_if_alone:tapEv });
+        mapped++;
+      } else if(bd.tap){
+        const ev=tapToEvents(bd.tap); if(ev){ baseRule.manipulators.push({ type:"basic", from:{ key_code:from }, to:ev }); mapped++; } else skipped.push(`base:${baseOf(keyId)}=${bd.tap}`);
+      }
+    });
+    if(baseRule.manipulators.length) rules.push(baseRule);
+    // function layers
+    data.layers.filter(l=>l.id!=="base").forEach(l=>{
+      const L=data.bindings[l.id]||{};
+      Object.keys(L).forEach(appId=>{
+        const app=appById(appId);
+        const rule={ description:`Keyboard Layout Studio — ${l.name}${appId!=="__all__"?(" @"+(app?app.name:appId)):""}`, manipulators:[] };
+        Object.entries(L[appId]).forEach(([keyId,bd])=>{
+          const from=physKC(keyId); const ev=tapToEvents(bd.tap);
+          if(!from||!ev){ if(bd.tap) skipped.push(`${l.name}:${baseOf(keyId)}=${bd.tap}`); return; }
+          const conditions=[];
+          if(l.trigger && l.trigger.keyId) conditions.push({ type:"variable_if", name:l.id, value:1 });
+          if(appId!=="__all__" && app && app.bundleId) conditions.push({ type:"frontmost_application_if", bundle_identifiers:[escapeRe(app.bundleId)] });
+          const man={ type:"basic", from:{ key_code:from, modifiers:{optional:["any"]} }, to:ev };
+          if(conditions.length) man.conditions=conditions;
+          rule.manipulators.push(man); mapped++;
+        });
+        if(rule.manipulators.length) rules.push(rule);
+      });
+    });
+    // combos
+    if(data.combos.length){
+      const cr={ description:"Keyboard Layout Studio — combos", manipulators:[] };
+      data.combos.forEach(cm=>{
+        const sim=cm.keyIds.map(k=>({ key_code: physKC(k)||k })).filter(x=>x.key_code);
+        const ev=tapToEvents(cm.output);
+        if(sim.length>=2 && ev) cr.manipulators.push({ type:"basic", from:{ simultaneous:sim, modifiers:{optional:["any"]} }, to:ev });
+      });
+      if(cr.manipulators.length) rules.push(cr);
+    }
+    const obj={ title:"Keyboard Layout Studio (MacBook 16 JIS)", rules };
+    obj.__note = `自動生成 best-effort。マップ済 ${mapped} 件。未マップ(要手動): ${skipped.length} 件` + (skipped.length?` — ${skipped.slice(0,12).join(", ")}${skipped.length>12?" …":""}`:"");
+    return obj;
+  }
+  function escapeRe(s){ return "^"+s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"$"; }
+
+  /* ===== 書き出し: Vimium 設定 ===== */
+  function buildVimium(){
+    const VIM_CMD={ "Calendar":"createTab https://calendar.google.com","X(Twitter)":"createTab https://x.com/?lang=ja","Gemini":"createTab https://gemini.google.com/app?hl=ja","YouTube":"createTab https://www.youtube.com/","JARA Rower":"createTab https://www.jara.or.jp/rower.html","Gmail":"createTab https://mail.google.com/","最初タブ(⇧K)":"firstTab","最後タブ(⇧I)":"lastTab","前タブ(⇧J)":"previousTab","次タブ(⇧L)":"nextTab","戻る":"goBack","進む":"goForward","最上部(⇧T)":"scrollToTop","最下部(⇧G)":"scrollToBottom" };
+    const unmap="unmap o\nunmap O\nunmap b\nunmap B\nunmap T\nunmap H\nunmap k\nunmap h\nunmap f\nunmap F\nunmap gt\nunmap gT\nunmap W\nunmap /\nunmap n\nunmap N\nunmap p\nunmap P\nunmap i\nunmap v\nunmap V\nunmap ?";
+    const vim=data.bindings.vimium ? (data.bindings.vimium.__all__||{}) : {};
+    const lines=[];
+    Object.entries(vim).forEach(([keyId,bd])=>{
+      if(!bd.tap) return;
+      const cmd=VIM_CMD[bd.tap];
+      const isShift=/⇧|\(⇧/.test(bd.tap)||/タブ|最上部|最下部/.test(bd.tap)&&/⇧/.test(bd.tap);
+      const key=isShift?keyId.toUpperCase():keyId.toLowerCase();
+      if(cmd) lines.push(`map ${key} ${cmd}`);
+      else if(/^https?:/.test(bd.note||"")) lines.push(`map ${key} createTab ${bd.note}`);
+    });
+    return { exclusionRules:[{passKeys:"mt",pattern:"https?://calendar.google.com/*"},{passKeys:"",pattern:"https?://www.youtube.com/*"}], keyMappings: unmap+"\n"+lines.join("\n"), newTabDestination:"browserNewTabPage", searchEngines:"", settingsVersion:"2.4.2" };
+  }
+
+  function downloadJSON(obj, name){ const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
+  const stamp = () => new Date().toISOString().slice(0,10);
+
+  async function writeKarabiner(){
+    const kb=buildKarabiner();
+    if(serverAvailable){
+      try{
+        const r=await fetch("/api/write-karabiner",{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(kb) });
+        const j=await r.json();
+        if(j.ok) alert("✅ Karabinerに書き込みました\n"+j.path+"\n\n"+(kb.__note||"")+"\n\nKarabiner-Elements → 「Complex Modifications」→ Add rule で\n『Keyboard Layout Studio』を Enable してください。");
+        else alert("書き込み失敗: "+j.error);
+      }catch(e){ alert("書き込み失敗: "+e.message); }
+    } else {
+      downloadJSON(kb, "keyboard-studio-karabiner.json");
+      alert("ℹ️ ローカルサーバ未起動のため、Karabiner用JSONをダウンロードしました。\nstart-keyboard-studio.command から起動すると「直接書き込み」できます。\n\n手動の場合: Karabiner-Elements の complex_modifications フォルダに置いて読み込んでください。");
+    }
+  }
+
+  async function pingServer(){ try{ const r=await fetch("/api/ping",{cache:"no-store"}); const j=await r.json(); serverAvailable=!!j.ok; }catch(e){ serverAvailable=false; } updateWriteButton(); }
+  function updateWriteButton(){ const b=$("btnWrite"); if(serverAvailable){ b.classList.remove("off"); b.title="Karabiner-Elements に直接反映（ローカル起動中）"; } else { b.classList.add("off"); b.title="ローカル起動でフル機能（今はJSONダウンロードになります）"; } }
+
+  /* ===== イベント ===== */
+  document.querySelectorAll(".ltab").forEach(t=>t.addEventListener("click", ()=>{ ui.tab=t.dataset.ltab; document.querySelectorAll(".ltab").forEach(x=>x.setAttribute("aria-selected", x===t)); $("tab-layers").hidden=ui.tab!=="layers"; $("tab-combos").hidden=ui.tab!=="combos"; $("tab-fns").hidden=ui.tab!=="fns"; }));
+  $("addLayer").addEventListener("click", addLayer);
+  $("addApp").addEventListener("click", addApp);
+  $("addCat").addEventListener("click", addCategory);
+  $("appSelect").addEventListener("change", e=>{ ui.activeApp=e.target.value; refreshAll(); });
+  $("diffToggle").addEventListener("click", e=>{ ui.diff=!ui.diff; e.currentTarget.setAttribute("aria-pressed", ui.diff); renderKeyboard(); fitRowHeight(); });
+  $("keyNameToggle").addEventListener("click", e=>{ data.settings.showKeyNames=!data.settings.showKeyNames; e.currentTarget.setAttribute("aria-pressed", data.settings.showKeyNames); saveSettings(); });
+  $("btnSettings").addEventListener("click", openSettings);
+  $("addCombo").addEventListener("click", ()=>{ const keys=$("comboKeys").value.trim().split(/\s+/).filter(Boolean); const out=$("comboOut").value.trim(); if(keys.length<2||!out){ alert("同時押しキー（2つ以上）と出力を入力してください"); return; } pushHistory(); data.combos.push({id:"cmb-"+Date.now().toString(36),name:"",keyIds:keys,output:out,layers:[ui.activeLayer]}); $("comboKeys").value=""; $("comboOut").value=""; commit(); });
+  $("addFn").addEventListener("click", ()=>{ const label=$("fnLabel").value.trim(); if(!label) return; pushHistory(); data.functions.push({id:"fn-"+Date.now().toString(36),label,category:$("fnCat").value}); $("fnLabel").value=""; commit(); });
+  $("btnUndo").addEventListener("click", undo);
+  $("btnRedo").addEventListener("click", redo);
+  $("btnWrite").addEventListener("click", writeKarabiner);
+
+  // export menu
+  const exportMenu=$("exportMenu");
+  $("btnExportMenu").addEventListener("click", e=>{ e.stopPropagation(); exportMenu.classList.toggle("show"); });
+  document.addEventListener("click", ()=>exportMenu.classList.remove("show"));
+  exportMenu.addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return; const act=b.dataset.act; exportMenu.classList.remove("show");
+    if(act==="karabiner") downloadJSON(buildKarabiner(), "keyboard-studio-karabiner.json");
+    else if(act==="vimium") downloadJSON(buildVimium(), "vimium-options.json");
+    else if(act==="project") downloadJSON(data, `keyboard-layout-${stamp()}.json`);
+    else if(act==="import") $("fileInput").click();
+    else if(act==="reset"){ if(confirm("初期配列（プリロード状態）に戻します。現在の編集内容は失われます。よろしいですか？")){ pushHistory(); data=defaultData(); ui.activeLayer="base"; ui.activeApp="__all__"; ui.selectedKey=null; commit(); } }
+  });
+  $("fileInput").addEventListener("change", e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ try{ const obj=JSON.parse(r.result); if(!sanitizeData(obj)) throw new Error("形式が不正です（layers と bindings が必要）"); pushHistory(); data=obj; reconcileUI(); commit(); }catch(err){ alert("読み込み失敗: "+err.message); } e.target.value=""; }; r.readAsText(f); });
+
+  document.addEventListener("keydown", e=>{
+    if(e.target.closest("input, textarea, select")) return;
+    const meta=e.metaKey||e.ctrlKey;
+    if(meta && e.key.toLowerCase()==="z"){ e.preventDefault(); e.shiftKey?redo():undo(); return; }
+    if(/^[0-9]$/.test(e.key)){ const l=data.layers.find(x=>x.index===Number(e.key)); if(l){ ui.activeLayer=l.id; refreshAll(); } }
+    if(e.key==="d"){ ui.diff=!ui.diff; $("diffToggle").setAttribute("aria-pressed",ui.diff); renderKeyboard(); fitRowHeight(); }
+  });
+  window.addEventListener("resize", fitRowHeight);
+  new ResizeObserver(fitRowHeight).observe(keyboard);
+
+  // boot
+  reconcileUI(); refreshAll(); updateUndoButtons(); fitRowHeight(); pingServer();
+})();
+</script>
+</body>
+</html>
