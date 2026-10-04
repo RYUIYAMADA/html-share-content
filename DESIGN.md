@@ -8,7 +8,7 @@ updated: 2026-06-18
 # DESIGN.md — Keyboard Layout Studio
 
 > Claude Code / Codex が `keyboard-editor.html` の UI を触るとき**毎回最初に読む**設計契約。
-> グローバルDS（`~/Desktop/ryui-workspace/projects/tools/ryuiyamada-design-system/`）を継承し、
+> グローバルDS（`~/ryui-workspace/os/ryuiyamada-design-system/`）を継承し、
 > **このプロジェクト固有の差分だけ**を書く。global と矛盾する時はこのファイルが優先。
 > 値はすべて `keyboard-editor.html` の `:root` に実在するもの（実態ベース）。
 
